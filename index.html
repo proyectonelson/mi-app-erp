@@ -393,11 +393,8 @@
 
       products.forEach(p => {
         const finalStock = Number(p.stock) || 0;
-        // Calcular stock inicial sumando lo vendido al stock actual restante
-        const totalSold = currentSales
-          .filter(s => Number(s.product_id) === Number(p.id))
-          .reduce((acc, s) => acc + Number(s.quantity), 0);
-        const initialStock = finalStock + totalSold;
+        // El stock inicial es el que se registró originalmente guardado en la base de datos (initial_stock o stock si es antiguo)
+        const initialStock = p.initial_stock !== undefined && p.initial_stock !== null ? Number(p.initial_stock) : finalStock;
 
         const totalVal = (parseFloat(p.price) || 0) * finalStock;
         const isLowStock = finalStock <= 5;
@@ -442,7 +439,16 @@
 
       if (!name || isNaN(price)) return alert("Ingresa al menos el Nombre y un Precio válido.");
 
-      const { error } = await supabaseClient.from('products').insert([{ name, sku, category: category || 'General', price, stock }]);
+      // Guardamos tanto el stock inicial como el stock actual igual al valor ingresado
+      const { error } = await supabaseClient.from('products').insert([{ 
+        name, 
+        sku, 
+        category: category || 'General', 
+        price, 
+        stock: stock,
+        initial_stock: stock 
+      }]);
+
       if (error) alert("Error: " + error.message);
       else {
         document.getElementById('prod-name').value = '';
@@ -468,13 +474,17 @@
 
         if (!jsonData.length) return alert("El archivo está vacío.");
 
-        const formattedData = jsonData.map(row => ({
-          name: row.Nombre || row.name || 'Sin Nombre',
-          price: parseFloat(row.Precio || row.price || 0),
-          stock: parseInt(row.Stock || row.stock || 0),
-          sku: String(row.SKU || row.sku || ''),
-          category: String(row.Categoria || row.category || 'General')
-        }));
+        const formattedData = jsonData.map(row => {
+          const stockVal = parseInt(row.Stock || row.stock || 0);
+          return {
+            name: row.Nombre || row.name || 'Sin Nombre',
+            price: parseFloat(row.Precio || row.price || 0),
+            stock: stockVal,
+            initial_stock: stockVal,
+            sku: String(row.SKU || row.sku || ''),
+            category: String(row.Categoria || row.category || 'General')
+          };
+        });
 
         const { error } = await supabaseClient.from('products').insert(formattedData);
         if (error) alert("Error al importar: " + error.message);
@@ -551,7 +561,7 @@
 
       if (saleError) return alert("Error al registrar venta: " + saleError.message);
 
-      // 2. Descontar stock permitiendo quedar en negativo
+      // 2. Descontar stock restando de forma acumulativa (permitiendo negativos si se supera)
       const currentStock = Number(product.stock) || 0;
       const newStock = currentStock - Number(qty);
 
