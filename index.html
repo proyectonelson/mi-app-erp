@@ -144,7 +144,7 @@
       </div>
     </div>
 
-    <!-- SECCIÓN NUEVA: TABLERO DE SEGUIMIENTO DE INVENTARIO -->
+    <!-- SECCIÓN TABLERO DE SEGUIMIENTO DE INVENTARIO -->
     <div id="tab-stock-board" style="display: none;">
       <div class="panel">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 10px;">
@@ -286,9 +286,14 @@
       document.getElementById('login-view').style.display = 'none';
       document.getElementById('dashboard-view').style.display = 'block';
       document.getElementById('user-email').textContent = "Empresa: " + email;
-      loadProducts();
-      loadCustomers();
-      loadSales();
+      loadAllData();
+    }
+
+    async function loadAllData() {
+      await loadProducts();
+      await loadCustomers();
+      await loadSales();
+      calculateMetrics();
     }
 
     function switchTab(tab) {
@@ -357,10 +362,9 @@
       // Renderizar el tablero de inventario
       renderStockBoard(currentProducts);
 
-      // Selector de Punto de Venta
+      // Selector de Punto de Venta actualizando stock visualmente
       const selectEl = document.getElementById('sale-prod-select');
       selectEl.innerHTML = currentProducts.map(p => `<option value="${p.id}">${p.name} - $${p.price} (Stock: ${p.stock})</option>`).join('');
-      calculateMetrics();
     }
 
     function renderStockBoard(products) {
@@ -437,7 +441,7 @@
         document.getElementById('prod-cat').value = '';
         document.getElementById('prod-price').value = '';
         document.getElementById('prod-stock').value = '';
-        loadProducts();
+        loadAllData();
       }
     };
 
@@ -468,7 +472,7 @@
         else {
           alert(`¡${formattedData.length} productos importados correctamente!`);
           fileInput.value = '';
-          loadProducts();
+          loadAllData();
         }
       };
       reader.readAsArrayBuffer(fileInput.files[0]);
@@ -511,7 +515,7 @@
         document.getElementById('cust-doc').value = '';
         document.getElementById('cust-phone').value = '';
         document.getElementById('cust-email').value = '';
-        loadCustomers();
+        loadAllData();
       }
     };
 
@@ -520,13 +524,16 @@
       const prodId = document.getElementById('sale-prod-select').value;
       const customerName = document.getElementById('sale-customer-select').value;
       const qty = parseInt(document.getElementById('sale-qty').value) || 1;
-      const product = currentProducts.find(p => p.id == prodId);
+      
+      // Búsqueda estricta convirtiendo ambos IDs a número para evitar fallas de coincidencia
+      const product = currentProducts.find(p => Number(p.id) === Number(prodId));
 
-      if (!product) return alert("Selecciona un producto.");
-      if (product.stock < qty) return alert("Stock insuficiente.");
+      if (!product) return alert("Selecciona un producto válido.");
+      if (product.stock < qty) return alert("Stock insuficiente. Unidades disponibles: " + product.stock);
 
       const total = product.price * qty;
 
+      // 1. Registrar Venta en Supabase
       const { data: saleData, error: saleError } = await supabaseClient.from('sales').insert([{
         product_id: product.id,
         product_name: product.name,
@@ -535,13 +542,24 @@
         total_price: total
       }]).select();
 
-      if (saleError) return alert("Error: " + saleError.message);
+      if (saleError) return alert("Error al registrar venta: " + saleError.message);
 
-      // Descontar del inventario
-      await supabaseClient.from('products').update({ stock: product.stock - qty }).eq('id', product.id);
+      // 2. Descontar stock directamente en la base de datos por ID
+      const newStock = Number(product.stock) - Number(qty);
+      const { error: updateError } = await supabaseClient
+        .from('products')
+        .update({ stock: newStock })
+        .eq('id', product.id);
 
-      await loadProducts();
-      await loadSales();
+      if (updateError) {
+        alert("Error al actualizar el stock: " + updateError.message);
+        return;
+      }
+
+      // 3. Recargar todos los datos y métricas en pantalla
+      await loadAllData();
+      
+      alert("¡Venta registrada y stock actualizado con éxito!");
       printReceipt(saleData[0]);
     };
 
@@ -561,7 +579,6 @@
         });
         salesEl.innerHTML = html + '</tbody></table>';
       }
-      calculateMetrics();
     }
 
     function printReceipt(sale) {
