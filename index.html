@@ -3,72 +3,191 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>ERP SaaS</title>
-  <!-- React & ReactDOM -->
+  <title>ERP SaaS - Control de Negocios</title>
+  <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-  <!-- Babel para interpretar JSX -->
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-  <!-- Supabase Client -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body {
-      background-color: #0f172a;
-      color: #ffffff;
-      font-family: system-ui, -apple-system, sans-serif;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      min-height: 100vh;
-    }
-    .card {
-      background-color: #1e293b;
-      border: 1px solid #334155;
-      border-radius: 12px;
-      padding: 32px;
-      text-align: center;
-      max-width: 400px;
-      width: 90%;
-      box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5);
-    }
-    .badge-icon {
-      width: 60px;
-      height: 60px;
-      background-color: #1e3a8a;
-      color: #60a5fa;
-      border-radius: 50%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      margin: 0 auto 20px auto;
-      font-size: 28px;
-      font-weight: bold;
-    }
-    h1 { font-size: 24px; font-weight: bold; margin-bottom: 8px; }
-    p { font-size: 14px; color: #94a3b8; margin-bottom: 24px; line-height: 1.5; }
-    .status {
-      background-color: rgba(16, 185, 129, 0.1);
-      border: 1px solid rgba(16, 185, 129, 0.3);
-      color: #34d399;
-      padding: 10px;
-      border-radius: 8px;
-      font-size: 14px;
-      font-weight: 600;
-    }
-  </style>
 </head>
-<body>
+<body class="bg-slate-900 text-slate-100 min-h-screen">
   <div id="root"></div>
 
   <script type="text/babel">
+    // REEMPLAZA ESTOS DOS VALORES CON TUS CLAVES DE SUPABASE
+    const SUPABASE_URL = "https://fnxjiottyuzxfpaunmfk.supabase.co";
+    const SUPABASE_ANON_KEY = "sb_publishable_mI3N805ARS6VqUHuS1rc6Q_dXPYV74Y";
+
+    const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
     function App() {
+      const [session, setSession] = React.useState(null);
+      const [email, setEmail] = React.useState('');
+      const [password, setPassword] = React.useState('');
+      const [loading, setLoading] = React.useState(false);
+      const [products, setProducts] = React.useState([]);
+      const [newProductName, setNewProductName] = React.useState('');
+      const [newProductPrice, setNewProductPrice] = React.useState('');
+
+      React.useEffect(() => {
+        supabaseClient.auth.getSession().then(({ data: { session } }) => {
+          setSession(session);
+        });
+
+        const { data: { subscription } } = supabaseClient.auth.onAuthStateChange((_event, session) => {
+          setSession(session);
+        });
+
+        return () => subscription.unsubscribe();
+      }, []);
+
+      React.useEffect(() => {
+        if (session) {
+          fetchProducts();
+        }
+      }, [session]);
+
+      const fetchProducts = async () => {
+        const { data, error } = await supabaseClient.from('products').select('*');
+        if (!error && data) setProducts(data);
+      };
+
+      const handleAuth = async (isSignUp) => {
+        setLoading(true);
+        const { error } = isSignUp 
+          ? await supabaseClient.auth.signUp({ email, password })
+          : await supabaseClient.auth.signInWithPassword({ email, password });
+
+        if (error) alert("Error: " + error.message);
+        setLoading(false);
+      };
+
+      const handleAddProduct = async (e) => {
+        e.preventDefault();
+        if (!newProductName || !newProductPrice) return;
+
+        const { error } = await supabaseClient.from('products').insert([
+          { name: newProductName, price: parseFloat(newProductPrice) }
+        ]);
+
+        if (error) {
+          alert("Error al guardar: " + error.message);
+        } else {
+          setNewProductName('');
+          setNewProductPrice('');
+          fetchProducts();
+        }
+      };
+
+      if (!session) {
+        return (
+          <div className="min-h-screen flex items-center justify-center p-4">
+            <div className="bg-slate-800 p-8 rounded-xl border border-slate-700 shadow-2xl max-w-md w-full">
+              <h1 className="text-2xl font-bold text-center mb-2 text-white">ERP SaaS</h1>
+              <p className="text-slate-400 text-center mb-6 text-sm">Ingresa a tu cuenta o registra tu empresa</p>
+              
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-xs font-semibold uppercase text-slate-400 mb-1">Correo Electrónico</label>
+                  <input 
+                    type="email" 
+                    value={email} 
+                    onChange={(e) => setEmail(e.target.value)}
+                    className="w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-white focus:outline-none focus:border-blue-500"
+                    placeholder="usuario@empresa.com"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold uppercase text-slate-400 mb-1">Contraseña</label>
+                  <input 
+                    type="password" 
+                    value={password} 
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-white focus:outline-none focus:border-blue-500"
+                    placeholder="••••••••"
+                  />
+                </div>
+                <button 
+                  onClick={() => handleAuth(false)}
+                  disabled={loading}
+                  className="w-full bg-blue-600 hover:bg-blue-500 text-white font-semibold p-3 rounded-lg transition"
+                >
+                  {loading ? 'Cargando...' : 'Iniciar Sesión'}
+                </button>
+                <button 
+                  onClick={() => handleAuth(true)}
+                  disabled={loading}
+                  className="w-full bg-slate-700 hover:bg-slate-600 text-slate-200 font-semibold p-3 rounded-lg transition"
+                >
+                  Registrarse
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      }
+
       return (
-        <div className="card">
-          <div className="badge-icon">✓</div>
-          <h1>¡Conexión Exitosa!</h1>
-          <p>Tu aplicación ERP SaaS está correctamente desplegada en Vercel y lista para conectar con Supabase.</p>
-          <div className="status">Estado: Servidor En Vivo</div>
+        <div className="max-w-4xl mx-auto p-6">
+          <header className="flex justify-between items-center mb-8 border-b border-slate-800 pb-4">
+            <div>
+              <h1 className="text-2xl font-bold text-white">Panel ERP</h1>
+              <p className="text-xs text-slate-400">{session.user.email}</p>
+            </div>
+            <button 
+              onClick={() => supabaseClient.auth.signOut()}
+              className="bg-red-500/10 border border-red-500/20 text-red-400 hover:bg-red-500/20 px-4 py-2 rounded-lg text-sm font-semibold transition"
+            >
+              Cerrar Sesión
+            </button>
+          </header>
+
+          <main className="grid md:grid-cols-3 gap-6">
+            <div className="bg-slate-800 p-6 rounded-xl border border-slate-700 h-fit">
+              <h2 className="text-lg font-bold mb-4">Agregar Producto</h2>
+              <form onSubmit={handleAddProduct} className="space-y-4">
+                <div>
+                  <label className="block text-xs text-slate-400 mb-1">Nombre</label>
+                  <input 
+                    type="text" 
+                    value={newProductName} 
+                    onChange={(e) => setNewProductName(e.target.value)}
+                    className="w-full bg-slate-900 border border-slate-700 rounded p-2 text-sm text-white"
+                    placeholder="Ej. Zapato Ejecutivo"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-400 mb-1">Precio ($)</label>
+                  <input 
+                    type="number" 
+                    value={newProductPrice} 
+                    onChange={(e) => setNewProductPrice(e.target.value)}
+                    className="w-full bg-slate-900 border border-slate-700 rounded p-2 text-sm text-white"
+                    placeholder="49.99"
+                  />
+                </div>
+                <button type="submit" className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-semibold py-2 rounded text-sm transition">
+                  Guardar en Inventario
+                </button>
+              </form>
+            </div>
+
+            <div className="md:col-span-2 bg-slate-800 p-6 rounded-xl border border-slate-700">
+              <h2 className="text-lg font-bold mb-4">Inventario Actual</h2>
+              {products.length === 0 ? (
+                <p className="text-slate-400 text-sm">No hay productos registrados en el sistema.</p>
+              ) : (
+                <div className="space-y-2">
+                  {products.map((p) => (
+                    <div key={p.id} className="flex justify-between items-center bg-slate-900 p-3 rounded border border-slate-700">
+                      <span className="font-medium text-slate-200">{p.name}</span>
+                      <span className="font-bold text-emerald-400">${p.price}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </main>
         </div>
       );
     }
