@@ -394,7 +394,7 @@
         const totalVal = (parseFloat(p.price) || 0) * (parseInt(p.stock) || 0);
         const isLowStock = p.stock <= 5;
         const statusBadge = isLowStock 
-          ? '<span class="badge badge-alert">⚠️ Stock Bajo</span>' 
+          ? '<span class="badge badge-alert">⚠️ Stock Bajo / Negativo</span>' 
           : '<span class="badge badge-ok">✓ Disponible</span>';
 
         html += `
@@ -403,7 +403,7 @@
             <td><strong>${p.name}</strong></td>
             <td>${p.category || 'General'}</td>
             <td>$${p.price}</td>
-            <td style="font-size: 14px; font-weight: bold; color: ${isLowStock ? '#ef4444' : '#38bdf8'};">${p.stock || 0} u.</td>
+            <td style="font-size: 14px; font-weight: bold; color: ${p.stock < 0 ? '#ef4444' : (isLowStock ? '#f59e0b' : '#38bdf8')};">${p.stock || 0} u.</td>
             <td style="color: #34d399; font-weight: bold;">$${totalVal.toLocaleString()}</td>
             <td>${statusBadge}</td>
           </tr>
@@ -525,11 +525,9 @@
       const customerName = document.getElementById('sale-customer-select').value;
       const qty = parseInt(document.getElementById('sale-qty').value) || 1;
       
-      // Búsqueda estricta convirtiendo ambos IDs a número para evitar fallas de coincidencia
       const product = currentProducts.find(p => Number(p.id) === Number(prodId));
 
       if (!product) return alert("Selecciona un producto válido.");
-      if (product.stock < qty) return alert("Stock insuficiente. Unidades disponibles: " + product.stock);
 
       const total = product.price * qty;
 
@@ -544,8 +542,10 @@
 
       if (saleError) return alert("Error al registrar venta: " + saleError.message);
 
-      // 2. Descontar stock directamente en la base de datos por ID
-      const newStock = Number(product.stock) - Number(qty);
+      // 2. Descontar stock permitiendo que baje o quede en negativo si se supera la existencia
+      const currentStock = Number(product.stock) || 0;
+      const newStock = currentStock - Number(qty);
+
       const { error: updateError } = await supabaseClient
         .from('products')
         .update({ stock: newStock })
