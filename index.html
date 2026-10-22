@@ -149,7 +149,7 @@
       <div class="panel">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 10px;">
           <div>
-            <h2 style="font-size: 16px;">Control y Seguimiento de Stock en Tiempo Real</h2>
+            <h2 style="font-size: 16px;">Control y Seguimiento de Stock (Inicial vs Final)</h2>
             <p style="font-size: 12px; color: #94a3b8;">Monitoreo de existencias y valorización por producto</p>
           </div>
           <div style="width: 250px;">
@@ -290,9 +290,9 @@
     }
 
     async function loadAllData() {
+      await loadSales();
       await loadProducts();
       await loadCustomers();
-      await loadSales();
       calculateMetrics();
     }
 
@@ -352,7 +352,7 @@
       if (currentProducts.length === 0) {
         listEl.innerHTML = '<p style="color: #94a3b8;">No hay productos guardados aún.</p>';
       } else {
-        let html = '<table><thead><tr><th>SKU</th><th>Producto</th><th>Categoría</th><th>Stock</th><th>Precio</th></tr></thead><tbody>';
+        let html = '<table><thead><tr><th>SKU</th><th>Producto</th><th>Categoría</th><th>Stock Actual</th><th>Precio</th></tr></thead><tbody>';
         currentProducts.forEach(p => {
           html += `<tr><td><span class="badge">${p.sku || 'N/A'}</span></td><td><strong>${p.name}</strong></td><td>${p.category || 'General'}</td><td style="color: ${p.stock > 0 ? '#f8fafc' : '#ef4444'}; font-weight: bold;">${p.stock || 0} u.</td><td style="color: #34d399; font-weight: bold;">$${p.price}</td></tr>`;
         });
@@ -382,7 +382,8 @@
               <th>Producto</th>
               <th>Categoría</th>
               <th>Precio Unit.</th>
-              <th>Stock Restante</th>
+              <th>Stock Inicial</th>
+              <th>Stock Final (Actual)</th>
               <th>Valor Total Stock</th>
               <th>Estado</th>
             </tr>
@@ -391,8 +392,15 @@
       `;
 
       products.forEach(p => {
-        const totalVal = (parseFloat(p.price) || 0) * (parseInt(p.stock) || 0);
-        const isLowStock = p.stock <= 5;
+        const finalStock = Number(p.stock) || 0;
+        // Calcular stock inicial sumando lo vendido al stock actual restante
+        const totalSold = currentSales
+          .filter(s => Number(s.product_id) === Number(p.id))
+          .reduce((acc, s) => acc + Number(s.quantity), 0);
+        const initialStock = finalStock + totalSold;
+
+        const totalVal = (parseFloat(p.price) || 0) * finalStock;
+        const isLowStock = finalStock <= 5;
         const statusBadge = isLowStock 
           ? '<span class="badge badge-alert">⚠️ Stock Bajo / Negativo</span>' 
           : '<span class="badge badge-ok">✓ Disponible</span>';
@@ -403,7 +411,8 @@
             <td><strong>${p.name}</strong></td>
             <td>${p.category || 'General'}</td>
             <td>$${p.price}</td>
-            <td style="font-size: 14px; font-weight: bold; color: ${p.stock < 0 ? '#ef4444' : (isLowStock ? '#f59e0b' : '#38bdf8')};">${p.stock || 0} u.</td>
+            <td style="color: #94a3b8; font-weight: bold;">${initialStock} u.</td>
+            <td style="font-size: 14px; font-weight: bold; color: ${finalStock < 0 ? '#ef4444' : (isLowStock ? '#f59e0b' : '#38bdf8')};">${finalStock} u.</td>
             <td style="color: #34d399; font-weight: bold;">$${totalVal.toLocaleString()}</td>
             <td>${statusBadge}</td>
           </tr>
@@ -542,7 +551,7 @@
 
       if (saleError) return alert("Error al registrar venta: " + saleError.message);
 
-      // 2. Descontar stock permitiendo que baje o quede en negativo si se supera la existencia
+      // 2. Descontar stock permitiendo quedar en negativo
       const currentStock = Number(product.stock) || 0;
       const newStock = currentStock - Number(qty);
 
