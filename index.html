@@ -4,5 +4,220 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>ERP SaaS - Control de Negocios</title>
-  <!-- Supabase JS Client v2 CDN Oficial -->
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+  <!-- Supabase Client -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background-color: #0f172a;
+      color: #f8fafc;
+      font-family: system-ui, -apple-system, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      padding: 20px;
+    }
+    .auth-card {
+      background-color: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 12px;
+      padding: 32px;
+      width: 100%;
+      max-width: 400px;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+    }
+    .title { font-size: 24px; font-weight: bold; text-align: center; margin-bottom: 8px; color: #38bdf8; }
+    .subtitle { font-size: 14px; text-align: center; color: #94a3b8; margin-bottom: 24px; }
+    .field-group { margin-bottom: 16px; }
+    label { display: block; font-size: 12px; font-weight: 600; color: #cbd5e1; margin-bottom: 6px; text-transform: uppercase; }
+    input {
+      width: 100%;
+      padding: 12px;
+      background-color: #0f172a;
+      border: 1px solid #334155;
+      border-radius: 8px;
+      color: #fff;
+      font-size: 14px;
+      outline: none;
+    }
+    input:focus { border-color: #38bdf8; }
+    .btn {
+      width: 100%;
+      padding: 12px;
+      border-radius: 8px;
+      font-weight: 600;
+      cursor: pointer;
+      border: none;
+      margin-top: 8px;
+      font-size: 14px;
+    }
+    .btn-primary { background-color: #0284c7; color: white; }
+    .btn-secondary { background-color: #334155; color: white; }
+    .btn-success { background-color: #10b981; color: white; }
+    .btn-danger { background-color: #ef4444; color: white; }
+    .btn:hover { opacity: 0.9; }
+    
+    .dashboard { width: 100%; max-width: 900px; display: none; }
+    .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #334155; padding-bottom: 16px; margin-bottom: 24px; }
+    .grid { display: grid; grid-template-columns: 1fr 2fr; gap: 24px; }
+    @media (max-width: 768px) { .grid { grid-template-columns: 1fr; } }
+    .panel { background-color: #1e293b; border: 1px solid #334155; border-radius: 12px; padding: 20px; }
+    .item-row { display: flex; justify-content: space-between; background-color: #0f172a; padding: 12px; border-radius: 6px; margin-bottom: 8px; border: 1px solid #334155; }
+  </style>
+</head>
+<body>
+
+  <!-- PANTALLA DE LOGIN -->
+  <div id="login-view" class="auth-card">
+    <h1 class="title">ERP SaaS</h1>
+    <p class="subtitle">Ingresa a tu cuenta o registra tu empresa</p>
+    
+    <div class="field-group">
+      <label>Correo Electrónico</label>
+      <input type="email" id="email" placeholder="usuario@empresa.com" />
+    </div>
+    <div class="field-group">
+      <label>Contraseña</label>
+      <input type="password" id="password" placeholder="••••••••" />
+    </div>
+    <button id="btn-login" class="btn btn-primary">Iniciar Sesión</button>
+    <button id="btn-signup" class="btn btn-secondary">Registrarse</button>
+  </div>
+
+  <!-- PANTALLA DE DASHBOARD -->
+  <div id="dashboard-view" class="dashboard">
+    <header class="header">
+      <div>
+        <h1 style="font-size: 20px; font-weight: bold;">Panel ERP SaaS</h1>
+        <p id="user-email" style="font-size: 12px; color: #94a3b8;"></p>
+      </div>
+      <button id="btn-logout" class="btn btn-danger" style="width: auto; padding: 8px 16px;">Cerrar Sesión</button>
+    </header>
+
+    <main class="grid">
+      <div class="panel">
+        <h2 style="font-size: 16px; margin-bottom: 16px;">Agregar Producto</h2>
+        <div class="field-group">
+          <label>Nombre del Producto</label>
+          <input type="text" id="prod-name" placeholder="Ej. Impresora POS" />
+        </div>
+        <div class="field-group">
+          <label>Precio ($)</label>
+          <input type="number" id="prod-price" placeholder="150.00" />
+        </div>
+        <button id="btn-add-prod" class="btn btn-success">Guardar en Inventario</button>
+      </div>
+
+      <div class="panel">
+        <h2 style="font-size: 16px; margin-bottom: 16px;">Inventario de la Empresa</h2>
+        <div id="products-list">
+          <p style="color: #94a3b8; font-size: 14px;">Cargando inventario...</p>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    // ⚠️ REEMPLAZA ESTAS DOS LINEAS CON TUS CLAVES DE SUPABASE
+    const SUPABASE_URL = "PEGA_AQUI_TU_PROJECT_URL";
+    const SUPABASE_ANON_KEY = "PEGA_AQUI_TU_ANON_PUBLIC_KEY";
+
+    const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    // Elementos DOM
+    const loginView = document.getElementById('login-view');
+    const dashboardView = document.getElementById('dashboard-view');
+    const emailInput = document.getElementById('email');
+    const passwordInput = document.getElementById('password');
+    const userEmailSpan = document.getElementById('user-email');
+    const productsList = document.getElementById('products-list');
+
+    // Verificar sesión al cargar
+    async function checkSession() {
+      const { data: { session } } = await supabaseClient.auth.getSession();
+      if (session) {
+        showDashboard(session.user.email);
+      } else {
+        showLogin();
+      }
+    }
+
+    function showLogin() {
+      loginView.style.display = 'block';
+      dashboardView.style.display = 'none';
+    }
+
+    function showDashboard(email) {
+      loginView.style.display = 'none';
+      dashboardView.style.display = 'block';
+      userEmailSpan.textContent = "Empresa: " + email;
+      loadProducts();
+    }
+
+    // Iniciar Sesión
+    document.getElementById('btn-login').onclick = async () => {
+      const email = emailInput.value;
+      const password = passwordInput.value;
+      const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
+      if (error) alert("Error: " + error.message);
+      else showDashboard(data.user.email);
+    };
+
+    // Registrarse
+    document.getElementById('btn-signup').onclick = async () => {
+      const email = emailInput.value;
+      const password = passwordInput.value;
+      const { error } = await supabaseClient.auth.signUp({ email, password });
+      if (error) alert("Error: " + error.message);
+      else alert("¡Registro exitoso! Ya puedes hacer clic en 'Iniciar Sesión'.");
+    };
+
+    // Cerrar Sesión
+    document.getElementById('btn-logout').onclick = async () => {
+      await supabaseClient.auth.signOut();
+      showLogin();
+    };
+
+    // Cargar Productos
+    async function loadProducts() {
+      const { data, error } = await supabaseClient.from('products').select('*');
+      if (error) {
+        productsList.innerHTML = `<p style="color: #ef4444; font-size: 14px;">Error al cargar: ${error.message}</p>`;
+        return;
+      }
+      if (!data || data.length === 0) {
+        productsList.innerHTML = '<p style="color: #94a3b8; font-size: 14px;">No hay productos guardados aún.</p>';
+        return;
+      }
+      productsList.innerHTML = data.map(p => `
+        <div class="item-row">
+          <span>${p.name}</span>
+          <strong style="color: #34d399;">$${p.price}</strong>
+        </div>
+      `).join('');
+    }
+
+    // Agregar Producto
+    document.getElementById('btn-add-prod').onclick = async () => {
+      const name = document.getElementById('prod-name').value;
+      const price = parseFloat(document.getElementById('prod-price').value);
+
+      if (!name || isNaN(price)) {
+        alert("Por favor completa el nombre y un precio válido.");
+        return;
+      }
+
+      const { error } = await supabaseClient.from('products').insert([{ name, price }]);
+      if (error) alert("Error al guardar: " + error.message);
+      else {
+        document.getElementById('prod-name').value = '';
+        document.getElementById('prod-price').value = '';
+        loadProducts();
+      }
+    };
+
+    checkSession();
+  </script>
+</body>
+</html>
