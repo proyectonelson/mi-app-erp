@@ -4,7 +4,10 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>ERP SaaS - Control de Negocios</title>
+  <!-- Supabase JS Client v2 CDN -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+  <!-- SheetJS para lectura de Excel -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -49,21 +52,28 @@
       cursor: pointer;
       border: none;
       margin-top: 8px;
-      font-size: 14px;
+      font-size: 13px;
+      display: inline-block;
+      text-align: center;
     }
     .btn-primary { background-color: #0284c7; color: white; }
     .btn-secondary { background-color: #334155; color: white; }
     .btn-success { background-color: #10b981; color: white; }
     .btn-danger { background-color: #ef4444; color: white; }
+    .btn-print { background-color: #8b5cf6; color: white; padding: 4px 8px; font-size: 11px; width: auto; margin-top: 0; }
     .btn:hover { opacity: 0.9; }
     
     .dashboard { width: 100%; max-width: 1100px; display: none; }
-    .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #334155; padding-bottom: 16px; margin-bottom: 24px; }
-    .nav-tabs { display: flex; gap: 10px; margin-bottom: 20px; }
-    .tab-btn { padding: 10px 20px; background-color: #1e293b; border: 1px solid #334155; border-radius: 8px; color: #94a3b8; cursor: pointer; font-weight: bold; }
+    .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #334155; padding-bottom: 16px; margin-bottom: 20px; }
+    .nav-tabs { display: flex; gap: 8px; margin-bottom: 20px; flex-wrap: wrap; }
+    .tab-btn { padding: 10px 16px; background-color: #1e293b; border: 1px solid #334155; border-radius: 8px; color: #94a3b8; cursor: pointer; font-weight: bold; font-size: 13px; }
     .tab-btn.active { background-color: #0284c7; color: white; border-color: #38bdf8; }
     
     .grid { display: grid; grid-template-columns: 320px 1fr; gap: 24px; }
+    .metrics-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 24px; }
+    .metric-card { background-color: #1e293b; border: 1px solid #334155; border-radius: 12px; padding: 20px; }
+    .metric-val { font-size: 24px; font-weight: bold; color: #38bdf8; margin-top: 5px; }
+    
     @media (max-width: 800px) { .grid { grid-template-columns: 1fr; } }
     .panel { background-color: #1e293b; border: 1px solid #334155; border-radius: 12px; padding: 20px; }
     
@@ -102,12 +112,36 @@
     </header>
 
     <div class="nav-tabs">
-      <button id="tab-inventory-btn" class="tab-btn active" onclick="switchTab('inventory')">📦 Inventario</button>
-      <button id="tab-sales-btn" class="tab-btn" onclick="switchTab('sales')">🛒 Punto de Venta / Ventas</button>
+      <button id="tab-metrics-btn" class="tab-btn active" onclick="switchTab('metrics')">📊 Dashboard</button>
+      <button id="tab-inventory-btn" class="tab-btn" onclick="switchTab('inventory')">📦 Inventario</button>
+      <button id="tab-sales-btn" class="tab-btn" onclick="switchTab('sales')">🛒 Punto de Venta</button>
+      <button id="tab-customers-btn" class="tab-btn" onclick="switchTab('customers')">👥 Clientes</button>
+    </div>
+
+    <!-- SECCIÓN METRICAS -->
+    <div id="tab-metrics">
+      <div class="metrics-grid">
+        <div class="metric-card">
+          <label>Ventas Totales ($)</label>
+          <div id="m-total-sales" class="metric-val">$0</div>
+        </div>
+        <div class="metric-card">
+          <label>N° Transacciones</label>
+          <div id="m-count-sales" class="metric-val">0</div>
+        </div>
+        <div class="metric-card">
+          <label>Valor en Inventario ($)</label>
+          <div id="m-total-inventory" class="metric-val">$0</div>
+        </div>
+        <div class="metric-card">
+          <label>Productos Registrados</label>
+          <div id="m-count-products" class="metric-val">0</div>
+        </div>
+      </div>
     </div>
 
     <!-- SECCIÓN INVENTARIO -->
-    <div id="tab-inventory" class="grid">
+    <div id="tab-inventory" class="grid" style="display: none;">
       <div class="panel">
         <h2 style="font-size: 16px; margin-bottom: 16px;">Nuevo Producto</h2>
         <div class="field-group">
@@ -132,7 +166,14 @@
             <input type="number" id="prod-stock" placeholder="10" />
           </div>
         </div>
-        <button id="btn-add-prod" class="btn btn-success">Guardar en Inventario</button>
+        <button id="btn-add-prod" class="btn btn-success">Guardar Producto</button>
+        
+        <hr style="border-color: #334155; margin: 20px 0;" />
+        
+        <h2 style="font-size: 14px; margin-bottom: 8px; color: #38bdf8;">📥 Carga Masiva desde Excel</h2>
+        <p style="font-size: 11px; color: #94a3b8; margin-bottom: 10px;">Sube un .xlsx con columnas: <b>name, price, stock, sku, category</b></p>
+        <input type="file" id="excel-file" accept=".xlsx, .xls, .csv" style="margin-bottom: 8px;" />
+        <button id="btn-import-excel" class="btn btn-secondary">Importar Excel</button>
       </div>
 
       <div class="panel">
@@ -145,6 +186,10 @@
     <div id="tab-sales" class="grid" style="display: none;">
       <div class="panel">
         <h2 style="font-size: 16px; margin-bottom: 16px;">Registrar Venta</h2>
+        <div class="field-group">
+          <label>Cliente</label>
+          <select id="sale-customer-select"></select>
+        </div>
         <div class="field-group">
           <label>Seleccionar Producto</label>
           <select id="sale-prod-select"></select>
@@ -161,16 +206,47 @@
         <div id="sales-list" style="overflow-x: auto;"></div>
       </div>
     </div>
+
+    <!-- SECCIÓN CLIENTES -->
+    <div id="tab-customers" class="grid" style="display: none;">
+      <div class="panel">
+        <h2 style="font-size: 16px; margin-bottom: 16px;">Nuevo Cliente</h2>
+        <div class="field-group">
+          <label>Nombre / Razon Social</label>
+          <input type="text" id="cust-name" placeholder="Ej. Juan Pérez / Empresa S.A.S" />
+        </div>
+        <div class="field-group">
+          <label>Documento / NIT</label>
+          <input type="text" id="cust-doc" placeholder="123456789" />
+        </div>
+        <div class="field-group">
+          <label>Teléfono</label>
+          <input type="text" id="cust-phone" placeholder="+57 300 000 0000" />
+        </div>
+        <div class="field-group">
+          <label>Email</label>
+          <input type="email" id="cust-email" placeholder="cliente@correo.com" />
+        </div>
+        <button id="btn-add-cust" class="btn btn-success">Guardar Cliente</button>
+      </div>
+
+      <div class="panel">
+        <h2 style="font-size: 16px; margin-bottom: 16px;">Directorio de Clientes</h2>
+        <div id="customers-list" style="overflow-x: auto;"></div>
+      </div>
+    </div>
   </div>
 
   <script>
-    // ⚠️ REEMPLAZA CON TUS CLAVES DE SUPABASE
+    // ⚠️ TUS CLAVES DE SUPABASE
     const SUPABASE_URL = "https://fnxjiottyuzxfpaunmfk.supabase.co";
     const SUPABASE_ANON_KEY = "sb_publishable_mI3N805ARS6VqUHuS1rc6Q_dXPYV74Y";
 
     const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
     let currentProducts = [];
+    let currentCustomers = [];
+    let currentSales = [];
 
     async function checkSession() {
       const { data: { session } } = await supabaseClient.auth.getSession();
@@ -188,14 +264,17 @@
       document.getElementById('dashboard-view').style.display = 'block';
       document.getElementById('user-email').textContent = "Empresa: " + email;
       loadProducts();
+      loadCustomers();
       loadSales();
     }
 
     function switchTab(tab) {
-      document.getElementById('tab-inventory').style.display = tab === 'inventory' ? 'grid' : 'none';
-      document.getElementById('tab-sales').style.display = tab === 'sales' ? 'grid' : 'none';
-      document.getElementById('tab-inventory-btn').className = 'tab-btn ' + (tab === 'inventory' ? 'active' : '');
-      document.getElementById('tab-sales-btn').className = 'tab-btn ' + (tab === 'sales' ? 'active' : '');
+      const tabs = ['metrics', 'inventory', 'sales', 'customers'];
+      tabs.forEach(t => {
+        document.getElementById('tab-' + t).style.display = t === tab ? (t === 'metrics' ? 'block' : 'grid') : 'none';
+        document.getElementById('tab-' + t + '-btn').className = 'tab-btn ' + (t === tab ? 'active' : '');
+      });
+      if (tab === 'metrics') calculateMetrics();
     }
 
     document.getElementById('btn-login').onclick = async () => {
@@ -219,12 +298,12 @@
       showLogin();
     };
 
+    // --- INVENTARIO ---
     async function loadProducts() {
       const { data, error } = await supabaseClient.from('products').select('*').order('id', { ascending: false });
       if (error) return;
       currentProducts = data || [];
 
-      // Renderizar tabla de inventario
       const listEl = document.getElementById('products-list');
       if (currentProducts.length === 0) {
         listEl.innerHTML = '<p style="color: #94a3b8;">No hay productos guardados aún.</p>';
@@ -236,9 +315,9 @@
         listEl.innerHTML = html + '</tbody></table>';
       }
 
-      // Actualizar selector de ventas
       const selectEl = document.getElementById('sale-prod-select');
       selectEl.innerHTML = currentProducts.map(p => `<option value="${p.id}">${p.name} - $${p.price} (Stock: ${p.stock})</option>`).join('');
+      calculateMetrics();
     }
 
     document.getElementById('btn-add-prod').onclick = async () => {
@@ -262,9 +341,84 @@
       }
     };
 
-    // Registrar Venta
+    // Importación de Excel
+    document.getElementById('btn-import-excel').onclick = () => {
+      const fileInput = document.getElementById('excel-file');
+      if (!fileInput.files.length) return alert("Selecciona un archivo Excel primero.");
+
+      const reader = new FileReader();
+      reader.onload = async (e) => {
+        const data = new Uint8Array(e.target.result);
+        const workbook = XLSX.read(data, { type: 'array' });
+        const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+        const jsonData = XLSX.utils.sheet_to_json(firstSheet);
+
+        if (!jsonData.length) return alert("El archivo está vacío.");
+
+        const formattedData = jsonData.map(row => ({
+          name: row.name || row.Nombre || 'Sin Nombre',
+          price: parseFloat(row.price || row.Precio || 0),
+          stock: parseInt(row.stock || row.Stock || 0),
+          sku: String(row.sku || row.SKU || ''),
+          category: String(row.category || row.Categoria || 'General')
+        }));
+
+        const { error } = await supabaseClient.from('products').insert(formattedData);
+        if (error) alert("Error al importar: " + error.message);
+        else {
+          alert(`¡${formattedData.length} productos importados correctamente!`);
+          fileInput.value = '';
+          loadProducts();
+        }
+      };
+      reader.readAsArrayBuffer(fileInput.files[0]);
+    };
+
+    // --- CLIENTES ---
+    async function loadCustomers() {
+      const { data, error } = await supabaseClient.from('customers').select('*').order('id', { ascending: false });
+      if (error) return;
+      currentCustomers = data || [];
+
+      const listEl = document.getElementById('customers-list');
+      if (currentCustomers.length === 0) {
+        listEl.innerHTML = '<p style="color: #94a3b8;">No hay clientes registrados aún.</p>';
+      } else {
+        let html = '<table><thead><tr><th>Cliente</th><th>Documento</th><th>Teléfono</th><th>Email</th></tr></thead><tbody>';
+        currentCustomers.forEach(c => {
+          html += `<tr><td><strong>${c.name}</strong></td><td>${c.document || 'N/A'}</td><td>${c.phone || 'N/A'}</td><td>${c.email || 'N/A'}</td></tr>`;
+        });
+        listEl.innerHTML = html + '</tbody></table>';
+      }
+
+      const custSelect = document.getElementById('sale-customer-select');
+      custSelect.innerHTML = '<option value="Cliente General">Cliente General</option>' + 
+        currentCustomers.map(c => `<option value="${c.name}">${c.name} (${c.document || 'S/D'})</option>`).join('');
+    }
+
+    document.getElementById('btn-add-cust').onclick = async () => {
+      const name = document.getElementById('cust-name').value;
+      const documentVal = document.getElementById('cust-doc').value;
+      const phone = document.getElementById('cust-phone').value;
+      const email = document.getElementById('cust-email').value;
+
+      if (!name) return alert("Ingresa el Nombre del Cliente.");
+
+      const { error } = await supabaseClient.from('customers').insert([{ name, document: documentVal, phone, email }]);
+      if (error) alert("Error: " + error.message);
+      else {
+        document.getElementById('cust-name').value = '';
+        document.getElementById('cust-doc').value = '';
+        document.getElementById('cust-phone').value = '';
+        document.getElementById('cust-email').value = '';
+        loadCustomers();
+      }
+    };
+
+    // --- VENTAS & IMPRESIÓN ---
     document.getElementById('btn-register-sale').onclick = async () => {
       const prodId = document.getElementById('sale-prod-select').value;
+      const customerName = document.getElementById('sale-customer-select').value;
       const qty = parseInt(document.getElementById('sale-qty').value) || 1;
       const product = currentProducts.find(p => p.id == prodId);
 
@@ -273,37 +427,86 @@
 
       const total = product.price * qty;
 
-      // 1. Registrar Venta
-      const { error: saleError } = await supabaseClient.from('sales').insert([{
+      const { data: saleData, error: saleError } = await supabaseClient.from('sales').insert([{
         product_id: product.id,
         product_name: product.name,
+        customer_name: customerName,
         quantity: qty,
         total_price: total
-      }]);
+      }]).select();
 
-      if (saleError) return alert("Error al registrar venta: " + saleError.message);
+      if (saleError) return alert("Error: " + saleError.message);
 
-      // 2. Descontar Stock
       await supabaseClient.from('products').update({ stock: product.stock - qty }).eq('id', product.id);
 
       loadProducts();
       loadSales();
-      alert("¡Venta realizada con éxito!");
+      printReceipt(saleData[0]);
     };
 
     async function loadSales() {
       const { data, error } = await supabaseClient.from('sales').select('*').order('id', { ascending: false });
+      if (error) return;
+      currentSales = data || [];
+
       const salesEl = document.getElementById('sales-list');
-      if (error || !data || data.length === 0) {
+      if (currentSales.length === 0) {
         salesEl.innerHTML = '<p style="color: #94a3b8;">No se han registrado ventas aún.</p>';
-        return;
+      } else {
+        let html = '<table><thead><tr><th>Fecha</th><th>Cliente</th><th>Producto</th><th>Cant.</th><th>Total</th><th>Recibo</th></tr></thead><tbody>';
+        currentSales.forEach(s => {
+          const date = new Date(s.created_at).toLocaleDateString();
+          html += `<tr><td>${date}</td><td>${s.customer_name || 'Cliente General'}</td><td><strong>${s.product_name}</strong></td><td>${s.quantity} u.</td><td style="color: #34d399; font-weight: bold;">$${s.total_price}</td><td><button class="btn btn-print" onclick='printReceipt(${JSON.stringify(s)})'>🖨️ Imprimir</button></td></tr>`;
+        });
+        salesEl.innerHTML = html + '</tbody></table>';
       }
-      let html = '<table><thead><tr><th>Fecha</th><th>Producto</th><th>Cantidad</th><th>Total</th></tr></thead><tbody>';
-      data.forEach(s => {
-        const date = new Date(s.created_at).toLocaleDateString();
-        html += `<tr><td>${date}</td><td><strong>${s.product_name}</strong></td><td>${s.quantity} u.</td><td style="color: #34d399; font-weight: bold;">$${s.total_price}</td></tr>`;
-      });
-      salesEl.innerHTML = html + '</tbody></table>';
+      calculateMetrics();
+    }
+
+    function printReceipt(sale) {
+      const win = window.open('', '', 'width=400,height=600');
+      win.document.write(`
+        <html>
+        <head>
+          <title>Comprobante de Venta #${sale.id}</title>
+          <style>
+            body { font-family: monospace; padding: 20px; font-size: 12px; }
+            .center { text-align: center; }
+            .line { border-bottom: 1px dashed #000; margin: 10px 0; }
+            .row { display: flex; justify-content: space-between; margin-bottom: 5px; }
+          </style>
+        </head>
+        <body>
+          <div class="center">
+            <h2>RECIBO DE VENTA</h2>
+            <p>SaaS ERP System</p>
+            <p>Fecha: ${new Date(sale.created_at).toLocaleString()}</p>
+          </div>
+          <div class="line"></div>
+          <p><b>Cliente:</b> ${sale.customer_name || 'Cliente General'}</p>
+          <p><b>N° Factura:</b> #00${sale.id}</p>
+          <div class="line"></div>
+          <div class="row"><span>Item: ${sale.product_name}</span></div>
+          <div class="row"><span>Cant x Precio: ${sale.quantity} u.</span><span>$${sale.total_price}</span></div>
+          <div class="line"></div>
+          <div class="row" style="font-size: 14px; font-weight: bold;"><span>TOTAL:</span><span>$${sale.total_price}</span></div>
+          <div class="line"></div>
+          <p class="center">¡Gracias por su compra!</p>
+          <script>window.print(); window.close();<\/script>
+        </body>
+        </html>
+      `);
+      win.document.close();
+    }
+
+    function calculateMetrics() {
+      const totalSalesSum = currentSales.reduce((acc, s) => acc + (parseFloat(s.total_price) || 0), 0);
+      const totalInvValue = currentProducts.reduce((acc, p) => acc + ((parseFloat(p.price) || 0) * (parseInt(p.stock) || 0)), 0);
+
+      document.getElementById('m-total-sales').textContent = `$${totalSalesSum.toLocaleString()}`;
+      document.getElementById('m-count-sales').textContent = currentSales.length;
+      document.getElementById('m-total-inventory').textContent = `$${totalInvValue.toLocaleString()}`;
+      document.getElementById('m-count-products').textContent = currentProducts.length;
     }
 
     checkSession();
