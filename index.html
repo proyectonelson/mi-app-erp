@@ -393,12 +393,13 @@
 
       products.forEach(p => {
         const finalStock = Number(p.stock) || 0;
+        // Tomamos el stock inicial fijo de la BD, o si no existe, usamos el stock actual de respaldo
         const initialStock = (p.initial_stock !== undefined && p.initial_stock !== null) ? Number(p.initial_stock) : finalStock;
 
         const totalVal = (parseFloat(p.price) || 0) * finalStock;
         const isLowStock = finalStock <= 5;
         const statusBadge = isLowStock 
-          ? '<span class="badge badge-alert">⚠️ Stock Bajo / Negativo</span>' 
+          ? '<span class="badge badge-alert">⚠️ Stock Bajo</span>' 
           : '<span class="badge badge-ok">✓ Disponible</span>';
 
         html += `
@@ -408,7 +409,7 @@
             <td>${p.category || 'General'}</td>
             <td>$${p.price}</td>
             <td style="color: #94a3b8; font-weight: bold;">${initialStock} u.</td>
-            <td style="font-size: 14px; font-weight: bold; color: ${finalStock < 0 ? '#ef4444' : (isLowStock ? '#f59e0b' : '#38bdf8')};">${finalStock} u.</td>
+            <td style="font-size: 14px; font-weight: bold; color: ${finalStock <= 0 ? '#ef4444' : '#38bdf8'};">${finalStock} u.</td>
             <td style="color: #34d399; font-weight: bold;">$${totalVal.toLocaleString()}</td>
             <td>${statusBadge}</td>
           </tr>
@@ -438,6 +439,7 @@
 
       if (!name || isNaN(price)) return alert("Ingresa al menos el Nombre y un Precio válido.");
 
+      // Guardamos el stock inicial fijo y el stock actual con el mismo valor inicial
       const { error } = await supabaseClient.from('products').insert([{ 
         name, 
         sku, 
@@ -532,7 +534,7 @@
         document.getElementById('cust-doc').value = '';
         document.getElementById('cust-phone').value = '';
         document.getElementById('cust-email').value = '';
-        loadAllData();
+        loadCustomers();
       }
     };
 
@@ -545,6 +547,13 @@
       const product = currentProducts.find(p => Number(p.id) === Number(prodId));
 
       if (!product) return alert("Selecciona un producto válido.");
+
+      const currentStock = Number(product.stock) || 0;
+
+      // VALIDACIÓN: Evitar vender más de lo que hay disponible en stock actual
+      if (qty > currentStock) {
+        return alert(`Stock insuficiente. Solo quedan ${currentStock} unidades disponibles.`);
+      }
 
       const total = product.price * qty;
 
@@ -560,7 +569,6 @@
       if (saleError) return alert("Error al registrar venta: " + saleError.message);
 
       // 2. Descontar el stock actual restando la cantidad vendida
-      const currentStock = Number(product.stock) || 0;
       const newStock = currentStock - Number(qty);
 
       const { error: updateError } = await supabaseClient
