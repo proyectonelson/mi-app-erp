@@ -82,6 +82,8 @@
     th { background-color: #0f172a; color: #94a3b8; padding: 10px; font-size: 11px; text-transform: uppercase; border-bottom: 1px solid #334155; }
     td { padding: 12px 10px; border-bottom: 1px solid #334155; color: #e2e8f0; }
     .badge { padding: 3px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; background-color: #334155; color: #38bdf8; }
+    .badge-alert { background-color: #7f1d1d; color: #fca5a5; }
+    .badge-ok { background-color: #064e3b; color: #6ee7b7; }
   </style>
 </head>
 <body>
@@ -114,7 +116,8 @@
 
     <div class="nav-tabs">
       <button id="tab-metrics-btn" class="tab-btn active" onclick="switchTab('metrics')">📊 Dashboard</button>
-      <button id="tab-inventory-btn" class="tab-btn" onclick="switchTab('inventory')">📦 Inventario</button>
+      <button id="tab-stock-board-btn" class="tab-btn" onclick="switchTab('stock-board')">📋 Tablero de Inventario</button>
+      <button id="tab-inventory-btn" class="tab-btn" onclick="switchTab('inventory')">➕ Registrar Producto / Excel</button>
       <button id="tab-sales-btn" class="tab-btn" onclick="switchTab('sales')">🛒 Punto de Venta</button>
       <button id="tab-customers-btn" class="tab-btn" onclick="switchTab('customers')">👥 Clientes</button>
     </div>
@@ -141,7 +144,23 @@
       </div>
     </div>
 
-    <!-- SECCIÓN INVENTARIO -->
+    <!-- SECCIÓN NUEVA: TABLERO DE SEGUIMIENTO DE INVENTARIO -->
+    <div id="tab-stock-board" style="display: none;">
+      <div class="panel">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 10px;">
+          <div>
+            <h2 style="font-size: 16px;">Control y Seguimiento de Stock en Tiempo Real</h2>
+            <p style="font-size: 12px; color: #94a3b8;">Monitoreo de existencias y valorización por producto</p>
+          </div>
+          <div style="width: 250px;">
+            <input type="text" id="stock-search" placeholder="🔍 Buscar por nombre o SKU..." oninput="filterStockBoard()" />
+          </div>
+        </div>
+        <div id="stock-board-list" style="overflow-x: auto;"></div>
+      </div>
+    </div>
+
+    <!-- SECCIÓN REGISTRO DE PRODUCTO / EXCEL -->
     <div id="tab-inventory" class="grid" style="display: none;">
       <div class="panel">
         <h2 style="font-size: 16px; margin-bottom: 16px;">Nuevo Producto</h2>
@@ -181,7 +200,7 @@
       </div>
 
       <div class="panel">
-        <h2 style="font-size: 16px; margin-bottom: 16px;">Inventario de la Empresa</h2>
+        <h2 style="font-size: 16px; margin-bottom: 16px;">Listado Rápido de Productos</h2>
         <div id="products-list" style="overflow-x: auto;"></div>
       </div>
     </div>
@@ -206,19 +225,8 @@
       </div>
 
       <div class="panel">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
-          <h2 style="font-size: 16px;">Historial de Ventas</h2>
-          <button class="btn btn-secondary" style="width: auto; padding: 4px 10px; font-size: 11px;" onclick="toggleSalesView('stock')">📦 Ver Stock Actual</button>
-        </div>
-        
-        <!-- Pestaña interna en POS para alternar entre ventas y estado final del inventario -->
-        <div id="pos-sales-container">
-          <div id="sales-list" style="overflow-x: auto;"></div>
-        </div>
-        <div id="pos-stock-container" style="display: none;">
-          <h3 style="font-size: 13px; color: #38bdf8; margin-bottom: 10px;">Inventario Final Disponible</h3>
-          <div id="pos-stock-list" style="overflow-x: auto;"></div>
-        </div>
+        <h2 style="font-size: 16px; margin-bottom: 16px;">Historial de Ventas</h2>
+        <div id="sales-list" style="overflow-x: auto;"></div>
       </div>
     </div>
 
@@ -253,7 +261,7 @@
   </div>
 
   <script>
-    // ⚠️ REEMPLAZA CON TUS CLAVES DE SUPABASE
+    // ⚠️ TUS CLAVES DE SUPABASE
     const SUPABASE_URL = "https://fnxjiottyuzxfpaunmfk.supabase.co";
     const SUPABASE_ANON_KEY = "sb_publishable_mI3N805ARS6VqUHuS1rc6Q_dXPYV74Y";
 
@@ -284,12 +292,15 @@
     }
 
     function switchTab(tab) {
-      const tabs = ['metrics', 'inventory', 'sales', 'customers'];
+      const tabs = ['metrics', 'stock-board', 'inventory', 'sales', 'customers'];
       tabs.forEach(t => {
-        document.getElementById('tab-' + t).style.display = t === tab ? (t === 'metrics' ? 'block' : 'grid') : 'none';
-        document.getElementById('tab-' + t + '-btn').className = 'tab-btn ' + (t === tab ? 'active' : '');
+        const el = document.getElementById('tab-' + t);
+        if (el) el.style.display = t === tab ? (t === 'metrics' || t === 'stock-board' ? 'block' : 'grid') : 'none';
+        const btn = document.getElementById('tab-' + t + '-btn');
+        if (btn) btn.className = 'tab-btn ' + (t === tab ? 'active' : '');
       });
       if (tab === 'metrics') calculateMetrics();
+      if (tab === 'stock-board') renderStockBoard(currentProducts);
     }
 
     document.getElementById('btn-login').onclick = async () => {
@@ -325,13 +336,13 @@
       XLSX.writeFile(workbook, "Plantilla_Inventario_ERP.xlsx");
     };
 
-    // --- INVENTARIO ---
+    // --- INVENTARIO & TABLERO ---
     async function loadProducts() {
       const { data, error } = await supabaseClient.from('products').select('*').order('id', { ascending: false });
       if (error) return;
       currentProducts = data || [];
 
-      // Renderizar tabla principal de inventario
+      // Listado del modulo de registro
       const listEl = document.getElementById('products-list');
       if (currentProducts.length === 0) {
         listEl.innerHTML = '<p style="color: #94a3b8;">No hay productos guardados aún.</p>';
@@ -343,21 +354,70 @@
         listEl.innerHTML = html + '</tbody></table>';
       }
 
-      // Renderizar estado del inventario dentro del Punto de Venta
-      const posStockEl = document.getElementById('pos-stock-list');
-      if (currentProducts.length === 0) {
-        posStockEl.innerHTML = '<p style="color: #94a3b8;">Sin productos en catálogo.</p>';
-      } else {
-        let posHtml = '<table><thead><tr><th>Producto</th><th>Stock Disponible</th><th>Precio</th></tr></thead><tbody>';
-        currentProducts.forEach(p => {
-          posHtml += `<tr><td><strong>${p.name}</strong></td><td style="color: ${p.stock > 0 ? '#38bdf8' : '#ef4444'}; font-weight: bold;">${p.stock || 0} u.</td><td style="color: #34d399;">$${p.price}</td></tr>`;
-        });
-        posStockEl.innerHTML = posHtml + '</tbody></table>';
-      }
+      // Renderizar el tablero de inventario
+      renderStockBoard(currentProducts);
 
+      // Selector de Punto de Venta
       const selectEl = document.getElementById('sale-prod-select');
       selectEl.innerHTML = currentProducts.map(p => `<option value="${p.id}">${p.name} - $${p.price} (Stock: ${p.stock})</option>`).join('');
       calculateMetrics();
+    }
+
+    function renderStockBoard(products) {
+      const boardEl = document.getElementById('stock-board-list');
+      if (!products || products.length === 0) {
+        boardEl.innerHTML = '<p style="color: #94a3b8;">No hay productos en el inventario.</p>';
+        return;
+      }
+
+      let html = `
+        <table>
+          <thead>
+            <tr>
+              <th>SKU</th>
+              <th>Producto</th>
+              <th>Categoría</th>
+              <th>Precio Unit.</th>
+              <th>Stock Restante</th>
+              <th>Valor Total Stock</th>
+              <th>Estado</th>
+            </tr>
+          </thead>
+          <tbody>
+      `;
+
+      products.forEach(p => {
+        const totalVal = (parseFloat(p.price) || 0) * (parseInt(p.stock) || 0);
+        const isLowStock = p.stock <= 5;
+        const statusBadge = isLowStock 
+          ? '<span class="badge badge-alert">⚠️ Stock Bajo</span>' 
+          : '<span class="badge badge-ok">✓ Disponible</span>';
+
+        html += `
+          <tr>
+            <td><span class="badge">${p.sku || 'N/A'}</span></td>
+            <td><strong>${p.name}</strong></td>
+            <td>${p.category || 'General'}</td>
+            <td>$${p.price}</td>
+            <td style="font-size: 14px; font-weight: bold; color: ${isLowStock ? '#ef4444' : '#38bdf8'};">${p.stock || 0} u.</td>
+            <td style="color: #34d399; font-weight: bold;">$${totalVal.toLocaleString()}</td>
+            <td>${statusBadge}</td>
+          </tr>
+        `;
+      });
+
+      html += '</tbody></table>';
+      boardEl.innerHTML = html;
+    }
+
+    function filterStockBoard() {
+      const query = document.getElementById('stock-search').value.toLowerCase();
+      const filtered = currentProducts.filter(p => 
+        (p.name && p.name.toLowerCase().includes(query)) ||
+        (p.sku && p.sku.toLowerCase().includes(query)) ||
+        (p.category && p.category.toLowerCase().includes(query))
+      );
+      renderStockBoard(filtered);
     }
 
     document.getElementById('btn-add-prod').onclick = async () => {
@@ -456,18 +516,6 @@
     };
 
     // --- VENTAS & IMPRESIÓN ---
-    function toggleSalesView(view) {
-      const salesCont = document.getElementById('pos-sales-container');
-      const stockCont = document.getElementById('pos-stock-container');
-      if (view === 'stock' && salesCont.style.display !== 'none') {
-        salesCont.style.display = 'none';
-        stockCont.style.display = 'block';
-      } else {
-        salesCont.style.display = 'block';
-        stockCont.style.display = 'none';
-      }
-    }
-
     document.getElementById('btn-register-sale').onclick = async () => {
       const prodId = document.getElementById('sale-prod-select').value;
       const customerName = document.getElementById('sale-customer-select').value;
