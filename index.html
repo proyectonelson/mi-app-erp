@@ -6,7 +6,7 @@
   <title>ERP SaaS - Control de Negocios</title>
   <!-- Supabase JS Client v2 CDN -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
-  <!-- SheetJS para lectura de Excel -->
+  <!-- SheetJS para lectura y descarga de Excel -->
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -60,10 +60,11 @@
     .btn-secondary { background-color: #334155; color: white; }
     .btn-success { background-color: #10b981; color: white; }
     .btn-danger { background-color: #ef4444; color: white; }
+    .btn-download { background-color: #059669; color: white; }
     .btn-print { background-color: #8b5cf6; color: white; padding: 4px 8px; font-size: 11px; width: auto; margin-top: 0; }
     .btn:hover { opacity: 0.9; }
     
-    .dashboard { width: 100%; max-width: 1100px; display: none; }
+    .dashboard { width: 100%; max-width: 1150px; display: none; }
     .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #334155; padding-bottom: 16px; margin-bottom: 20px; }
     .nav-tabs { display: flex; gap: 8px; margin-bottom: 20px; flex-wrap: wrap; }
     .tab-btn { padding: 10px 16px; background-color: #1e293b; border: 1px solid #334155; border-radius: 8px; color: #94a3b8; cursor: pointer; font-weight: bold; font-size: 13px; }
@@ -171,7 +172,10 @@
         <hr style="border-color: #334155; margin: 20px 0;" />
         
         <h2 style="font-size: 14px; margin-bottom: 8px; color: #38bdf8;">📥 Carga Masiva desde Excel</h2>
-        <p style="font-size: 11px; color: #94a3b8; margin-bottom: 10px;">Sube un .xlsx con columnas: <b>name, price, stock, sku, category</b></p>
+        <p style="font-size: 11px; color: #94a3b8; margin-bottom: 10px;">1. Descarga el formato oficial para llenar tu inventario:</p>
+        <button id="btn-download-template" class="btn btn-download">📄 Descargar Plantilla Excel</button>
+        
+        <p style="font-size: 11px; color: #94a3b8; margin: 12px 0 6px 0;">2. Selecciona y sube el archivo completado:</p>
         <input type="file" id="excel-file" accept=".xlsx, .xls, .csv" style="margin-bottom: 8px;" />
         <button id="btn-import-excel" class="btn btn-secondary">Importar Excel</button>
       </div>
@@ -202,8 +206,19 @@
       </div>
 
       <div class="panel">
-        <h2 style="font-size: 16px; margin-bottom: 16px;">Historial de Ventas</h2>
-        <div id="sales-list" style="overflow-x: auto;"></div>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+          <h2 style="font-size: 16px;">Historial de Ventas</h2>
+          <button class="btn btn-secondary" style="width: auto; padding: 4px 10px; font-size: 11px;" onclick="toggleSalesView('stock')">📦 Ver Stock Actual</button>
+        </div>
+        
+        <!-- Pestaña interna en POS para alternar entre ventas y estado final del inventario -->
+        <div id="pos-sales-container">
+          <div id="sales-list" style="overflow-x: auto;"></div>
+        </div>
+        <div id="pos-stock-container" style="display: none;">
+          <h3 style="font-size: 13px; color: #38bdf8; margin-bottom: 10px;">Inventario Final Disponible</h3>
+          <div id="pos-stock-list" style="overflow-x: auto;"></div>
+        </div>
       </div>
     </div>
 
@@ -212,7 +227,7 @@
       <div class="panel">
         <h2 style="font-size: 16px; margin-bottom: 16px;">Nuevo Cliente</h2>
         <div class="field-group">
-          <label>Nombre / Razon Social</label>
+          <label>Nombre / Razón Social</label>
           <input type="text" id="cust-name" placeholder="Ej. Juan Pérez / Empresa S.A.S" />
         </div>
         <div class="field-group">
@@ -238,7 +253,7 @@
   </div>
 
   <script>
-    // ⚠️ TUS CLAVES DE SUPABASE
+    // ⚠️ REEMPLAZA CON TUS CLAVES DE SUPABASE
     const SUPABASE_URL = "https://fnxjiottyuzxfpaunmfk.supabase.co";
     const SUPABASE_ANON_KEY = "sb_publishable_mI3N805ARS6VqUHuS1rc6Q_dXPYV74Y";
 
@@ -298,12 +313,25 @@
       showLogin();
     };
 
+    // --- DESCARGAR PLANTILLA EXCEL ---
+    document.getElementById('btn-download-template').onclick = () => {
+      const templateData = [
+        { SKU: "IMP-001", Nombre: "Impresora POS Thermal", Categoria: "Hardware", Precio: 150000, Stock: 50 },
+        { SKU: "LPT-002", Nombre: "Lector Código de Barras", Categoria: "Periféricos", Precio: 85000, Stock: 30 }
+      ];
+      const worksheet = XLSX.utils.json_to_sheet(templateData);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, "Plantilla_Inventario");
+      XLSX.writeFile(workbook, "Plantilla_Inventario_ERP.xlsx");
+    };
+
     // --- INVENTARIO ---
     async function loadProducts() {
       const { data, error } = await supabaseClient.from('products').select('*').order('id', { ascending: false });
       if (error) return;
       currentProducts = data || [];
 
+      // Renderizar tabla principal de inventario
       const listEl = document.getElementById('products-list');
       if (currentProducts.length === 0) {
         listEl.innerHTML = '<p style="color: #94a3b8;">No hay productos guardados aún.</p>';
@@ -313,6 +341,18 @@
           html += `<tr><td><span class="badge">${p.sku || 'N/A'}</span></td><td><strong>${p.name}</strong></td><td>${p.category || 'General'}</td><td style="color: ${p.stock > 0 ? '#f8fafc' : '#ef4444'}; font-weight: bold;">${p.stock || 0} u.</td><td style="color: #34d399; font-weight: bold;">$${p.price}</td></tr>`;
         });
         listEl.innerHTML = html + '</tbody></table>';
+      }
+
+      // Renderizar estado del inventario dentro del Punto de Venta
+      const posStockEl = document.getElementById('pos-stock-list');
+      if (currentProducts.length === 0) {
+        posStockEl.innerHTML = '<p style="color: #94a3b8;">Sin productos en catálogo.</p>';
+      } else {
+        let posHtml = '<table><thead><tr><th>Producto</th><th>Stock Disponible</th><th>Precio</th></tr></thead><tbody>';
+        currentProducts.forEach(p => {
+          posHtml += `<tr><td><strong>${p.name}</strong></td><td style="color: ${p.stock > 0 ? '#38bdf8' : '#ef4444'}; font-weight: bold;">${p.stock || 0} u.</td><td style="color: #34d399;">$${p.price}</td></tr>`;
+        });
+        posStockEl.innerHTML = posHtml + '</tbody></table>';
       }
 
       const selectEl = document.getElementById('sale-prod-select');
@@ -356,11 +396,11 @@
         if (!jsonData.length) return alert("El archivo está vacío.");
 
         const formattedData = jsonData.map(row => ({
-          name: row.name || row.Nombre || 'Sin Nombre',
-          price: parseFloat(row.price || row.Precio || 0),
-          stock: parseInt(row.stock || row.Stock || 0),
-          sku: String(row.sku || row.SKU || ''),
-          category: String(row.category || row.Categoria || 'General')
+          name: row.Nombre || row.name || 'Sin Nombre',
+          price: parseFloat(row.Precio || row.price || 0),
+          stock: parseInt(row.Stock || row.stock || 0),
+          sku: String(row.SKU || row.sku || ''),
+          category: String(row.Categoria || row.category || 'General')
         }));
 
         const { error } = await supabaseClient.from('products').insert(formattedData);
@@ -416,6 +456,18 @@
     };
 
     // --- VENTAS & IMPRESIÓN ---
+    function toggleSalesView(view) {
+      const salesCont = document.getElementById('pos-sales-container');
+      const stockCont = document.getElementById('pos-stock-container');
+      if (view === 'stock' && salesCont.style.display !== 'none') {
+        salesCont.style.display = 'none';
+        stockCont.style.display = 'block';
+      } else {
+        salesCont.style.display = 'block';
+        stockCont.style.display = 'none';
+      }
+    }
+
     document.getElementById('btn-register-sale').onclick = async () => {
       const prodId = document.getElementById('sale-prod-select').value;
       const customerName = document.getElementById('sale-customer-select').value;
@@ -437,10 +489,11 @@
 
       if (saleError) return alert("Error: " + saleError.message);
 
+      // Descontar del inventario
       await supabaseClient.from('products').update({ stock: product.stock - qty }).eq('id', product.id);
 
-      loadProducts();
-      loadSales();
+      await loadProducts();
+      await loadSales();
       printReceipt(saleData[0]);
     };
 
