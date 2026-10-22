@@ -4,19 +4,79 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>ERP SaaS - Control de Negocios</title>
-  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- React & Dependencies -->
   <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background-color: #0f172a;
+      color: #f8fafc;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      padding: 20px;
+    }
+    .auth-card {
+      background-color: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 12px;
+      padding: 32px;
+      width: 100%;
+      max-width: 400px;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+    }
+    .title { font-size: 24px; font-weight: bold; text-align: center; margin-bottom: 8px; color: #38bdf8; }
+    .subtitle { font-size: 14px; text-align: center; color: #94a3b8; margin-bottom: 24px; }
+    .field-group { margin-bottom: 16px; }
+    label { display: block; font-size: 12px; font-weight: 600; color: #cbd5e1; margin-bottom: 6px; text-transform: uppercase; }
+    input {
+      width: 100%;
+      padding: 12px;
+      background-color: #0f172a;
+      border: 1px solid #334155;
+      border-radius: 8px;
+      color: #fff;
+      font-size: 14px;
+      outline: none;
+    }
+    input:focus { border-color: #38bdf8; }
+    .btn {
+      width: 100%;
+      padding: 12px;
+      border-radius: 8px;
+      font-weight: 600;
+      cursor: pointer;
+      border: none;
+      margin-top: 8px;
+      font-size: 14px;
+      transition: opacity 0.2s;
+    }
+    .btn-primary { background-color: #0284c7; color: white; }
+    .btn-secondary { background-color: #334155; color: white; }
+    .btn-success { background-color: #10b981; color: white; }
+    .btn-danger { background-color: #ef4444; color: white; }
+    .btn:hover { opacity: 0.9; }
+    
+    /* Dashboard styles */
+    .dashboard { width: 100%; max-width: 900px; }
+    .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #334155; padding-bottom: 16px; margin-bottom: 24px; }
+    .grid { display: grid; grid-template-columns: 1fr 2fr; gap: 24px; }
+    @media (max-width: 768px) { .grid { grid-template-columns: 1fr; } }
+    .panel { background-color: #1e293b; border: 1px solid #334155; border-radius: 12px; padding: 20px; }
+    .item-row { display: flex; justify-content: space-between; background-color: #0f172a; padding: 12px; border-radius: 6px; margin-bottom: 8px; border: 1px solid #334155; }
+  </style>
 </head>
-<body class="bg-slate-900 text-slate-100 min-h-screen">
+<body>
   <div id="root"></div>
 
   <script type="text/babel">
-    // REEMPLAZA ESTOS DOS VALORES CON TUS CLAVES DE SUPABASE
-    const SUPABASE_URL = "https://fnxjiottyuzxfpaunmfk.supabase.co";
-    const SUPABASE_ANON_KEY = "sb_publishable_mI3N805ARS6VqUHuS1rc6Q_dXPYV74Y";
+    const SUPABASE_URL = "PEGA_AQUI_TU_PROJECT_URL";
+    const SUPABASE_ANON_KEY = "PEGA_AQUI_TU_ANON_PUBLIC_KEY";
 
     const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
@@ -30,21 +90,13 @@
       const [newProductPrice, setNewProductPrice] = React.useState('');
 
       React.useEffect(() => {
-        supabaseClient.auth.getSession().then(({ data: { session } }) => {
-          setSession(session);
-        });
-
-        const { data: { subscription } } = supabaseClient.auth.onAuthStateChange((_event, session) => {
-          setSession(session);
-        });
-
+        supabaseClient.auth.getSession().then(({ data: { session } }) => setSession(session));
+        const { data: { subscription } } = supabaseClient.auth.onAuthStateChange((_event, session) => setSession(session));
         return () => subscription.unsubscribe();
       }, []);
 
       React.useEffect(() => {
-        if (session) {
-          fetchProducts();
-        }
+        if (session) fetchProducts();
       }, [session]);
 
       const fetchProducts = async () => {
@@ -59,6 +111,7 @@
           : await supabaseClient.auth.signInWithPassword({ email, password });
 
         if (error) alert("Error: " + error.message);
+        else if (isSignUp) alert("¡Registro iniciado! Si requieres confirmar correo, revisa tu bandeja.");
         setLoading(false);
       };
 
@@ -70,9 +123,8 @@
           { name: newProductName, price: parseFloat(newProductPrice) }
         ]);
 
-        if (error) {
-          alert("Error al guardar: " + error.message);
-        } else {
+        if (error) alert("Error: " + error.message);
+        else {
           setNewProductName('');
           setNewProductPrice('');
           fetchProducts();
@@ -81,110 +133,89 @@
 
       if (!session) {
         return (
-          <div className="min-h-screen flex items-center justify-center p-4">
-            <div className="bg-slate-800 p-8 rounded-xl border border-slate-700 shadow-2xl max-w-md w-full">
-              <h1 className="text-2xl font-bold text-center mb-2 text-white">ERP SaaS</h1>
-              <p className="text-slate-400 text-center mb-6 text-sm">Ingresa a tu cuenta o registra tu empresa</p>
-              
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-xs font-semibold uppercase text-slate-400 mb-1">Correo Electrónico</label>
-                  <input 
-                    type="email" 
-                    value={email} 
-                    onChange={(e) => setEmail(e.target.value)}
-                    className="w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-white focus:outline-none focus:border-blue-500"
-                    placeholder="usuario@empresa.com"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold uppercase text-slate-400 mb-1">Contraseña</label>
-                  <input 
-                    type="password" 
-                    value={password} 
-                    onChange={(e) => setPassword(e.target.value)}
-                    className="w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-white focus:outline-none focus:border-blue-500"
-                    placeholder="••••••••"
-                  />
-                </div>
-                <button 
-                  onClick={() => handleAuth(false)}
-                  disabled={loading}
-                  className="w-full bg-blue-600 hover:bg-blue-500 text-white font-semibold p-3 rounded-lg transition"
-                >
-                  {loading ? 'Cargando...' : 'Iniciar Sesión'}
-                </button>
-                <button 
-                  onClick={() => handleAuth(true)}
-                  disabled={loading}
-                  className="w-full bg-slate-700 hover:bg-slate-600 text-slate-200 font-semibold p-3 rounded-lg transition"
-                >
-                  Registrarse
-                </button>
-              </div>
+          <div className="auth-card">
+            <h1 className="title">ERP SaaS</h1>
+            <p className="subtitle">Ingresa a tu cuenta o registra tu empresa</p>
+            
+            <div className="field-group">
+              <label>Correo Electrónico</label>
+              <input 
+                type="email" 
+                value={email} 
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="usuario@empresa.com"
+              />
             </div>
+            <div className="field-group">
+              <label>Contraseña</label>
+              <input 
+                type="password" 
+                value={password} 
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="••••••••"
+              />
+            </div>
+            <button onClick={() => handleAuth(false)} disabled={loading} className="btn btn-primary">
+              {loading ? 'Cargando...' : 'Iniciar Sesión'}
+            </button>
+            <button onClick={() => handleAuth(true)} disabled={loading} className="btn btn-secondary">
+              Registrarse
+            </button>
           </div>
         );
       }
 
       return (
-        <div className="max-w-4xl mx-auto p-6">
-          <header className="flex justify-between items-center mb-8 border-b border-slate-800 pb-4">
+        <div className="dashboard">
+          <header className="header">
             <div>
-              <h1 className="text-2xl font-bold text-white">Panel ERP</h1>
-              <p className="text-xs text-slate-400">{session.user.email}</p>
+              <h1 style={{ fontSize: '20px', fontWeight: 'bold' }}>Panel ERP SaaS</h1>
+              <p style={{ fontSize: '12px', color: '#94a3b8' }}>Empresa: {session.user.email}</p>
             </div>
-            <button 
-              onClick={() => supabaseClient.auth.signOut()}
-              className="bg-red-500/10 border border-red-500/20 text-red-400 hover:bg-red-500/20 px-4 py-2 rounded-lg text-sm font-semibold transition"
-            >
+            <button onClick={() => supabaseClient.auth.signOut()} className="btn btn-danger" style={{ width: 'auto', padding: '8px 16px' }}>
               Cerrar Sesión
             </button>
           </header>
 
-          <main className="grid md:grid-cols-3 gap-6">
-            <div className="bg-slate-800 p-6 rounded-xl border border-slate-700 h-fit">
-              <h2 className="text-lg font-bold mb-4">Agregar Producto</h2>
-              <form onSubmit={handleAddProduct} className="space-y-4">
-                <div>
-                  <label className="block text-xs text-slate-400 mb-1">Nombre</label>
+          <main className="grid">
+            <div className="panel">
+              <h2 style={{ fontSize: '16px', marginBottom: '16px' }}>Agregar Producto</h2>
+              <form onSubmit={handleAddProduct}>
+                <div className="field-group">
+                  <label>Nombre del Producto</label>
                   <input 
                     type="text" 
                     value={newProductName} 
                     onChange={(e) => setNewProductName(e.target.value)}
-                    className="w-full bg-slate-900 border border-slate-700 rounded p-2 text-sm text-white"
-                    placeholder="Ej. Zapato Ejecutivo"
+                    placeholder="Ej. Impresora POS"
                   />
                 </div>
-                <div>
-                  <label className="block text-xs text-slate-400 mb-1">Precio ($)</label>
+                <div className="field-group">
+                  <label>Precio ($)</label>
                   <input 
                     type="number" 
                     value={newProductPrice} 
                     onChange={(e) => setNewProductPrice(e.target.value)}
-                    className="w-full bg-slate-900 border border-slate-700 rounded p-2 text-sm text-white"
-                    placeholder="49.99"
+                    placeholder="150.00"
                   />
                 </div>
-                <button type="submit" className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-semibold py-2 rounded text-sm transition">
+                <button type="submit" className="btn btn-success">
                   Guardar en Inventario
                 </button>
               </form>
             </div>
 
-            <div className="md:col-span-2 bg-slate-800 p-6 rounded-xl border border-slate-700">
-              <h2 className="text-lg font-bold mb-4">Inventario Actual</h2>
+            <div className="panel">
+              <h2 style={{ fontSize: '16px', marginBottom: '16px' }}>Inventario de la Empresa</h2>
               {products.length === 0 ? (
-                <p className="text-slate-400 text-sm">No hay productos registrados en el sistema.</p>
+                <p style={{ color: '#94a3b8', fontSize: '14px' }}>No hay productos guardados aún.</p>
               ) : (
-                <div className="space-y-2">
-                  {products.map((p) => (
-                    <div key={p.id} className="flex justify-between items-center bg-slate-900 p-3 rounded border border-slate-700">
-                      <span className="font-medium text-slate-200">{p.name}</span>
-                      <span className="font-bold text-emerald-400">${p.price}</span>
-                    </div>
-                  ))}
-                </div>
+                products.map((p) => (
+                  <div key={p.id} className="item-row">
+                    <span>{p.name}</span>
+                    <strong style={{ color: '#34d399' }}>${p.price}</strong>
+                  </div>
+                ))
               )}
             </div>
           </main>
